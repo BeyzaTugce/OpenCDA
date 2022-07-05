@@ -6,14 +6,17 @@ Perception module base.
 # Author: Runsheng Xu <rxx3386@ucla.edu>
 # License: TDG-Attribution-NonCommercial-NoDistrib
 
+import base64
+import json
 import weakref
 import sys
-import time
-
 import carla
 import cv2
 import numpy as np
 import open3d as o3d
+import requests
+import psutil
+from flask import Flask, request, Response
 
 import opencda.core.sensing.perception.sensor_transformation as st
 from opencda.core.common.misc import \
@@ -25,6 +28,7 @@ from opencda.core.sensing.perception.o3d_lidar_libs import \
     o3d_visualizer_init, o3d_pointcloud_encode, o3d_visualizer_show, \
     o3d_camera_lidar_fusion
 
+app = Flask(__name__)
 
 class CameraSensor:
     """
@@ -375,8 +379,9 @@ class PerceptionManager:
     """
 
     def __init__(self, vehicle, config_yaml, cav_world,
-                 data_dump=False, carla_world=None, infra_id=None):
+                 data_dump=False, carla_world=None, infra_id=None, base_station_roles=None):
         self.vehicle = vehicle
+        self.base_station_roles = base_station_roles
         self.carla_world = carla_world if carla_world is not None \
             else self.vehicle.get_world()
         self.id = infra_id if infra_id is not None else vehicle.id
@@ -491,6 +496,36 @@ class PerceptionManager:
 
         return objects
 
+    def sort_base_stations(self):
+        """
+        Sort the base stations according to their distances to the vehicle.
+
+        Returns
+        -------
+        bs_sorted : list
+            The list of base stations sorted by their distance to the vehicle.
+        """
+        world = self.carla_world
+        base_station_list = world.get_actors().filter("static.prop.box01")
+        bs_dict = dict()
+        for bs in base_station_list:
+            bs_dict[bs.id] = self.dist(bs)
+        bs_sorted = sorted(bs_dict.items(), key = lambda kv: (kv[1], kv[0]))
+        #print("Base stations: ",bs_sorted)
+        return bs_sorted 
+
+    def find_nearest_base_station(self, sorted_bs_list: list):
+        """
+        Find the nearest one.
+
+        Returns
+        -------
+        base_station_id : int
+            The id of nearest base station to potentially offload tasks.
+        """
+        nearest = sorted_bs_list[0] if sorted_bs_list else None
+        return nearest
+
     def activate_mode(self, objects):
         """
         Use Yolov5 + Lidar fusion to detect objects.
@@ -507,17 +542,44 @@ class PerceptionManager:
          objects: dict
             Updated object dictionary.
         """
+        bs_coverage_thresh = 50
+        #for bs in base_station_list:
+        #    if self.dist(bs) < bs_coverage_thresh and bs.id != self.id:
+        print(f"Vehicle location: {self.ego_pos.location}")
+        sorted_bs_list = self.sort_base_stations()
+
+        if sorted_bs_list:
+            nearest_bs = self.find_nearest_base_station(sorted_bs_list)
+            if nearest_bs[1] < bs_coverage_thresh:
+                nearest_bs_role = self.base_station_roles[nearest_bs[0]]
+                print(f"Offload to bs {nearest_bs_role}")
+            else:
+                print("Local execution!")
+
         # retrieve current cameras and lidar data
         rgb_images = []
         for rgb_camera in self.rgb_camera:
             while rgb_camera.image is None:
                 continue
-            rgb_images.append(
-                cv2.cvtColor(
-                    np.array(
-                        rgb_camera.image),
-                    cv2.COLOR_BGR2RGB))
 
+            rgb_images.append(cv2.cvtColor(
+                    np.array(
+                    rgb_camera.image),
+                    cv2.COLOR_BGR2RGB))
+                    
+            images = []
+            #Convert image to sendable format and store in JSON
+            _, encimg = cv2.imencode(".jpg ", rgb_camera.image)
+            img_str = encimg.tostring()
+            img_byte = base64.b64encode(img_str).decode("utf-8")
+            images.append({'image': img_byte})
+
+        img_json = json.dumps(images)
+        #Send HTTP request
+        #response = requests.post("http://localhost:5000/detect", data=img_json)
+        #img_objects = json.loads(response.text)
+        #mem_usage = psutil.virtual_memory()
+        #print("mem usage: ",mem_usage)
         # yolo detection
         yolo_detection = self.ml_manager.object_detector(rgb_images)
         # rgb_images for drawing
@@ -535,6 +597,7 @@ class PerceptionManager:
             objects = o3d_camera_lidar_fusion(
                 objects,
                 yolo_detection.xyxy[i],
+                #json.loads(img_objects[i]),
                 self.lidar.data,
                 projected_lidar,
                 self.lidar.sensor)
@@ -589,9 +652,14 @@ class PerceptionManager:
         """
         world = self.carla_world
 
+        base_station_list = world.get_actors().filter("static.prop.box01")
         vehicle_list = world.get_actors().filter("*vehicle*")
         thresh = 50 if not self.data_dump else 120
-
+        bs_coverage_thresh = 50
+        for bs in base_station_list:
+            if self.dist(bs) < bs_coverage_thresh and bs.id != self.id:
+                print(f"Offload to bs {bs.id}: distance {self.dist(bs)}")
+            
         vehicle_list = [v for v in vehicle_list if self.dist(v) < thresh and
                         v.id != self.id]
 

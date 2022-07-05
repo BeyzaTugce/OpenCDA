@@ -219,9 +219,10 @@ class ScenarioManager:
         )
         return weather
 
-    def create_vehicle_manager(self, application,
+    def create_vehicle_manager(self,application,
                                map_helper=None,
-                               data_dump=False):
+                               data_dump=False,
+                               base_station_roles=None):
         """
         Create a list of single CAVs.
 
@@ -278,7 +279,8 @@ class ScenarioManager:
                 vehicle, cav_config, application,
                 self.carla_map, self.cav_world,
                 current_time=self.scenario_params['current_time'],
-                data_dumping=data_dump)
+                data_dumping=data_dump,
+                base_station_roles=base_station_roles)
 
             self.world.tick()
 
@@ -487,7 +489,6 @@ class ScenarioManager:
             Update traffic list.
         """
         blueprint_library = self.world.get_blueprint_library()
-
         ego_vehicle_random_list = car_blueprint_filter(blueprint_library,
                                                        self.carla_version)
         # if not random select, we always choose lincoln.mkz with green color
@@ -592,18 +593,157 @@ class ScenarioManager:
         tm.global_percentage_speed_difference(
             traffic_config['global_speed_perc'])
 
-        bg_list = []
+        bg_vehicle_list = []
 
         if isinstance(traffic_config['vehicle_list'], list):
-            bg_list = self.spawn_vehicles_by_list(tm,
+            bg_vehicle_list = self.spawn_vehicles_by_list(tm,
                                                   traffic_config,
-                                                  bg_list)
-
+                                                  bg_vehicle_list)
         else:
-            bg_list = self.spawn_vehicle_by_range(tm, traffic_config, bg_list)
+            bg_vehicle_list = self.spawn_vehicle_by_range(tm, traffic_config, bg_vehicle_list)
 
         print('CARLA traffic flow generated.')
-        return tm, bg_list
+
+        return tm, bg_vehicle_list
+
+    def spawn_base_stations_by_list(self, base_station_config, bs_list):
+        """
+        Spawn the base stations by the given list.
+
+        Parameters
+        ----------
+        base_station_config : dict
+            Base station configuration.
+
+        bs_list : list
+            The list contains all base stations.
+
+        Returns
+        -------
+        bs_list : list
+            Update traffic list.
+        """
+        blueprint_library = self.world.get_blueprint_library()
+        bp_base_station = blueprint_library.find('static.prop.box01')    
+        bs_role_names = dict()   
+
+        for i, base_station_config in enumerate(base_station_config['base_station_list']):
+            spawn_transform = carla.Transform(
+                carla.Location(
+                    x=base_station_config['spawn_position'][0],
+                    y=base_station_config['spawn_position'][1],
+                    z=base_station_config['spawn_position'][2]),
+                carla.Rotation(
+                    pitch=base_station_config['spawn_position'][5],
+                    yaw=base_station_config['spawn_position'][4],
+                    roll=base_station_config['spawn_position'][3]))
+            
+            base_station = self.world.spawn_actor(bp_base_station, spawn_transform)
+            bs_list.append(base_station)
+            role_name = 'edge_server_'+str(i)
+            bs_role_names[base_station.id ] = role_name
+            print("roles: ",bs_role_names)
+
+        return bs_list, bs_role_names
+
+    def spawn_base_station_by_range(self, base_station_config, bs_list):
+        """
+        Spawn the base stations by the given range.
+
+        Parameters
+        ----------
+        base_station_config : dict
+            Base station configuration.
+
+        bs_list : list
+            The list contains the base stations.
+
+        Returns
+        -------
+        bs_list : list
+            Update base station list.
+        """
+        blueprint_library = self.world.get_blueprint_library()
+        bp_base_station = blueprint_library.find("static.prop.box01")
+        
+        spawn_ranges = base_station_config['base_station_range']
+        spawn_set = set()
+        spawn_num = 0
+
+        bs_role_names = dict()
+
+        for spawn_range in spawn_ranges:
+            spawn_num += spawn_range[4]
+            x_min, x_max = math.floor(spawn_range[0]), math.ceil(spawn_range[1])
+            y = spawn_range[3]
+            for x in range(x_min, x_max, int(spawn_range[2])):
+                location = carla.Location(x=x, y=y, z=0.3)
+                way_point = self.carla_map.get_waypoint(location).transform
+
+                spawn_set.add((way_point.location.x,
+                                way_point.location.y,
+                                way_point.location.z,
+                                way_point.rotation.roll,
+                                way_point.rotation.yaw,
+                                way_point.rotation.pitch))
+        count = 0
+        spawn_list = list(spawn_set)
+        shuffle(spawn_list)
+
+        while count < spawn_num:
+            if len(spawn_list) == 0:
+                break
+
+            coordinates = spawn_list[0]
+            spawn_list.pop(0)
+
+            spawn_transform = carla.Transform(carla.Location(x=coordinates[0],
+                                                             y=coordinates[1],
+                                                             z=coordinates[2] + 0.3),
+                                              carla.Rotation(roll=coordinates[3],
+                                                             yaw=coordinates[4],
+                                                             pitch=coordinates[5]))
+           
+            base_station = self.world.try_spawn_actor(bp_base_station, spawn_transform)
+            bs_list.append(base_station)
+
+            role_name = 'edge_server_'+str(count)
+            bs_role_names[base_station.id ] = role_name
+            print("roles: ",bs_role_names)
+
+            if not base_station:
+                continue
+
+            bs_list.append(base_station)
+            count += 1
+
+        return bs_list, bs_role_names
+
+    def create_base_station_carla(self):
+        """
+        Create base stations.
+
+        Returns
+        -------
+        base_station_list : list
+            The list that contains all the base stations.
+
+        base_station_roles : dict
+            The dict that maps all the base stations to a role name (e.g. edge_server_1).
+        """
+        print('Spawning CARLA base stations.')
+        base_station_config = self.scenario_params['base_station']
+        base_station_list = []
+
+        if isinstance(base_station_config['base_station_list'], list):
+            base_station_list, base_station_roles = \
+            self.spawn_base_stations_by_list(base_station_config, base_station_list)
+        else:
+            base_station_list, base_station_roles = \
+                self.spawn_base_station_by_range(base_station_config, base_station_list)
+        print('CARLA base stations generated.')
+
+        return base_station_list, base_station_roles
 
     def tick(self):
         """

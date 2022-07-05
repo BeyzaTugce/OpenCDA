@@ -48,6 +48,9 @@ def run_scenario(opt, config_yaml):
         traffic_manager, bg_veh_list = \
             scenario_manager.create_traffic_carla()
 
+        # create base stations in carla
+        bg_base_station_list = scenario_manager.create_base_station_carla()
+
         # create evaluation manager
         eval_manager = \
             EvaluationManager(scenario_manager.cav_world,
@@ -84,3 +87,5 @@ def run_scenario(opt, config_yaml):
             v.destroy()
         for v in bg_veh_list:
             v.destroy()
+        for bs in bg_base_station_list:
+            bs.destroy()

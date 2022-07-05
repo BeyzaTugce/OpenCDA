@@ -108,12 +108,21 @@ sumo:
   client_order: 1
   step_length: *delta
 
+# define the base stations 
+base_station:
+  base_station_list: ~
+  base_station_range:
+      # xmin, xmax, x_step, y, num_of_stations
+    - [ 50, 250, 50, 90, 5]
+    - [ 120, 240, 30, 160, 5]
+
 # define scenario. In this scenario, only a single CAV will be spawned
 scenario:
   single_cav_list: # this is for merging vehicle or single cav without v2x
     - <<: *vehicle_base
       spawn_position: [47.7194, 139.51, 0.3, 0, 0, 0]
-      destination: [630, 145.51, 0.3]
+      #destination: [630, 145.51, 0.3]
+      destination: [370, 145.51, 0.3]
       v2x:
         <<: *base_v2x
         communication_range: 45

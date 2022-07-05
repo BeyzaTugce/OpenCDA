@@ -119,6 +119,14 @@ carla_traffic_manager:
   range:
     - [ 50, 250, 135, 145, 50, 4, 30]
 
+# define the base stations
+base_station:
+  base_station_list: ~
+  base_station_range:
+      # xmin, xmax, x_step, y, num_of_stations
+    - [ 50, 650, 100, 90, 4]
+    - [ 120, 620, 80, 160, 5]
+
 # define scenario. In this scenario, only a single CAV will be spawned
 scenario:
   single_cav_list: # this is for merging vehicle or single cav without v2x

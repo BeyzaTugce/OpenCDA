@@ -204,6 +204,10 @@ def o3d_camera_lidar_fusion(objects,
             int(detection[2]), int(detection[3])
         label = int(detection[5])
 
+        #x1, y1, x2, y2 = int(yolo_bbx['xmin'][str(i)]), int(yolo_bbx['ymin'][str(i)]),\
+        #    int(yolo_bbx['xmax'][str(i)]), int(yolo_bbx['ymax'][str(i)])
+        #label = int(yolo_bbx['class'][str(i)])
+
         # choose the lidar points in the 2d yolo bounding box
         points_in_bbx = \
             (projected_lidar[:, 0] > x1) & (projected_lidar[:, 0] < x2) & \

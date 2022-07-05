@@ -80,7 +80,8 @@ class VehicleManager(object):
             carla_map,
             cav_world,
             current_time='',
-            data_dumping=False):
+            data_dumping=False,
+            base_station_roles=None):
 
         # an unique uuid for this vehicle
         self.vid = str(uuid.uuid1())
@@ -102,7 +103,7 @@ class VehicleManager(object):
         # perception module
         self.perception_manager = PerceptionManager(
             vehicle, sensing_config['perception'], cav_world,
-            data_dumping)
+            data_dumping, base_station_roles=base_station_roles)
         # map manager
         self.map_manager = MapManager(vehicle,
                                       carla_map,

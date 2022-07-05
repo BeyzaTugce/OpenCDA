@@ -148,4 +148,5 @@ evaluation_outputs/
 docs/tmp.py
 video_dumping
 *data_dumping*
-
+*.jpg
+*.png

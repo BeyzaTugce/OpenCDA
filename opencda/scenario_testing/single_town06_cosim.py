@@ -34,10 +34,16 @@ def run_scenario(opt, config_yaml):
                                       town='Town06',
                                       cav_world=cav_world,
                                       sumo_file_parent_path=sumo_cfg)
+
+        # create base stations in carla
+        bg_base_station_list, base_station_roles = scenario_manager.create_base_station_carla()
+
         single_cav_list = \
             scenario_manager.create_vehicle_manager(application=['single'],
                                                     map_helper=map_api.
-                                                    spawn_helper_2lanefree)
+                                                    spawn_helper_2lanefree,
+                                                    base_station_roles=base_station_roles)
+
 
         # create evaluation manager
         eval_manager = \
@@ -66,3 +72,5 @@ def run_scenario(opt, config_yaml):
         scenario_manager.close()
         for v in single_cav_list:
             v.destroy()
+        for bs in bg_base_station_list:
+            bs.destroy()
