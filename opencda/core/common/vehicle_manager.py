@@ -21,6 +21,7 @@ from opencda.core.plan.behavior_agent \
     import BehaviorAgent
 from opencda.core.map.map_manager import MapManager
 from opencda.core.common.data_dumper import DataDumper
+from opencda.core.task_offloading.offloading_scheduler import OffloadingScheduler
 
 
 class VehicleManager(object):
@@ -94,6 +95,9 @@ class VehicleManager(object):
         behavior_config = config_yaml['behavior']
         control_config = config_yaml['controller']
         v2x_config = config_yaml['v2x']
+
+        # offloading scheduler
+        self.offloading_scheduler = OffloadingScheduler(vehicle, cav_world, base_station_roles)
 
         # v2x module
         self.v2x_manager = V2XManager(cav_world, v2x_config, self.vid)

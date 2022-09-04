@@ -27,6 +27,7 @@ from opencda.core.sensing.perception.static_obstacle import TrafficLight
 from opencda.core.sensing.perception.o3d_lidar_libs import \
     o3d_visualizer_init, o3d_pointcloud_encode, o3d_visualizer_show, \
     o3d_camera_lidar_fusion
+from opencda.core.task_offloading.offloading_scheduler import OffloadingScheduler
 
 app = Flask(__name__)
 
@@ -441,6 +442,9 @@ class PerceptionManager:
                                                       config_yaml['lidar'],
                                                       self.global_position)
 
+        # offloading scheduler
+        self.offloading_scheduler = OffloadingScheduler(vehicle, carla_world=carla_world, base_station_roles=base_station_roles)
+
         # count how many steps have been passed
         self.count = 0
         # ego position
@@ -496,35 +500,6 @@ class PerceptionManager:
 
         return objects
 
-    def sort_base_stations(self):
-        """
-        Sort the base stations according to their distances to the vehicle.
-
-        Returns
-        -------
-        bs_sorted : list
-            The list of base stations sorted by their distance to the vehicle.
-        """
-        world = self.carla_world
-        base_station_list = world.get_actors().filter("static.prop.box01")
-        bs_dict = dict()
-        for bs in base_station_list:
-            bs_dict[bs.id] = self.dist(bs)
-        bs_sorted = sorted(bs_dict.items(), key = lambda kv: (kv[1], kv[0]))
-        #print("Base stations: ",bs_sorted)
-        return bs_sorted 
-
-    def find_nearest_base_station(self, sorted_bs_list: list):
-        """
-        Find the nearest one.
-
-        Returns
-        -------
-        base_station_id : int
-            The id of nearest base station to potentially offload tasks.
-        """
-        nearest = sorted_bs_list[0] if sorted_bs_list else None
-        return nearest
 
     def activate_mode(self, objects):
         """
@@ -542,19 +517,7 @@ class PerceptionManager:
          objects: dict
             Updated object dictionary.
         """
-        bs_coverage_thresh = 50
-        #for bs in base_station_list:
-        #    if self.dist(bs) < bs_coverage_thresh and bs.id != self.id:
-        print(f"Vehicle location: {self.ego_pos.location}")
-        sorted_bs_list = self.sort_base_stations()
-
-        if sorted_bs_list:
-            nearest_bs = self.find_nearest_base_station(sorted_bs_list)
-            if nearest_bs[1] < bs_coverage_thresh:
-                nearest_bs_role = self.base_station_roles[nearest_bs[0]]
-                print(f"Offload to bs {nearest_bs_role}")
-            else:
-                print("Local execution!")
+        self.offloading_scheduler.offload_to_nearest(self.ego_pos)
 
         # retrieve current cameras and lidar data
         rgb_images = []
@@ -652,17 +615,13 @@ class PerceptionManager:
         """
         world = self.carla_world
 
-        base_station_list = world.get_actors().filter("static.prop.box01")
         vehicle_list = world.get_actors().filter("*vehicle*")
         thresh = 50 if not self.data_dump else 120
-        bs_coverage_thresh = 50
-        for bs in base_station_list:
-            if self.dist(bs) < bs_coverage_thresh and bs.id != self.id:
-                print(f"Offload to bs {bs.id}: distance {self.dist(bs)}")
-            
+
+        self.offloading_scheduler.offload_to_nearest(self.ego_pos)
+
         vehicle_list = [v for v in vehicle_list if self.dist(v) < thresh and
                         v.id != self.id]
-
         # use semantic lidar to filter out vehicles out of the range
         if self.data_dump:
             vehicle_list = self.filter_vehicle_out_sensor(vehicle_list)

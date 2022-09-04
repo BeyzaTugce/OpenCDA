@@ -29,15 +29,15 @@ def run_scenario(opt, config_yaml):
             scenario_manager.client. \
                 start_recorder("single_town06_carla.log", True)
 
+        # create base stations in carla
+        bg_base_station_list, base_station_roles = scenario_manager.create_base_station_carla()
+
         single_cav_list = \
-            scenario_manager.create_vehicle_manager(application=['single'])
+            scenario_manager.create_vehicle_manager(application=['single'], base_station_roles=base_station_roles)
 
         # create background traffic in carla
         traffic_manager, bg_veh_list = \
             scenario_manager.create_traffic_carla()
-
-        # create base stations in carla
-        bg_base_station_list = scenario_manager.create_base_station_carla()
 
         # create evaluation manager
         eval_manager = \
