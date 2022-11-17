@@ -628,20 +628,21 @@ class ScenarioManager:
         bs_role_names = dict()   
 
         for i, base_station_config in enumerate(base_station_config['base_station_list']):
+            hostname = base_station_config['spawn_position'][0]
+            position = base_station_config['spawn_position'][1]
             spawn_transform = carla.Transform(
                 carla.Location(
-                    x=base_station_config['spawn_position'][0],
-                    y=base_station_config['spawn_position'][1],
-                    z=base_station_config['spawn_position'][2]),
+                    x=position[0],
+                    y=position[1],
+                    z=position[2]),
                 carla.Rotation(
-                    pitch=base_station_config['spawn_position'][5],
-                    yaw=base_station_config['spawn_position'][4],
-                    roll=base_station_config['spawn_position'][3]))
+                    pitch=position[5],
+                    yaw=position[4],
+                    roll=position[3]))
             
             base_station = self.world.spawn_actor(bp_base_station, spawn_transform)
             bs_list.append(base_station)
-            role_name = 'edge_server_'+str(i)
-            bs_role_names[base_station.id ] = role_name
+            bs_role_names[base_station.id ] = hostname
             print("roles: ",bs_role_names)
 
         return bs_list, bs_role_names

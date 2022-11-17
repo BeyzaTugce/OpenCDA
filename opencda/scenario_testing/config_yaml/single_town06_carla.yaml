@@ -121,18 +121,21 @@ carla_traffic_manager:
 
 # define the base stations
 base_station:
-  base_station_list: ~
-  base_station_range:
+  base_station_list:
+    - spawn_position: ["edge1", [90, 100, 0.3, 0, 0, 0]]
+    - spawn_position: ["edge2", [250, 100, 0.3, 0, 0, 0]]
+    - spawn_position: ["edge3", [400, 160, 0.3, 0, 0, 0]]    
+  base_station_range: []
       # xmin, xmax, x_step, y, num_of_stations
-    - [ 50, 650, 100, 90, 4]
-    - [ 120, 620, 80, 160, 5]
+    #- [ 50, 650, 100, 90, 4]
+    #- [ 120, 620, 80, 160, 5]
 
 # define scenario. In this scenario, only a single CAV will be spawned
 scenario:
   single_cav_list: # this is for merging vehicle or single cav without v2x
     - <<: *vehicle_base
       spawn_position: [47.7194, 139.51, 0.3, 0, 0, 0]
-      destination: [600, 145.51, 0.3]
+      destination: [450, 145.51, 0.3]
       v2x:
         <<: *base_v2x
         communication_range: 45
@@ -142,3 +145,15 @@ scenario:
           <<: *base_local_planner
           debug_trajectory: false
           debug: false
+    #- <<: *vehicle_base
+    #  spawn_position: [40.7194, 139.51, 0.3, 0, 0, 0]
+    #  destination: [420, 139.51, 0.3]
+    #  v2x:
+    #    <<: *base_v2x
+    #    communication_range: 45
+    #  behavior:
+    #    <<: *base_behavior
+    #    local_planner:
+    #      <<: *base_local_planner
+    #      debug_trajectory: false
+    #      debug: false

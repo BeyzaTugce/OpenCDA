@@ -4,7 +4,39 @@
 Offloading scheduler to control offloading decisions for vehicular applications 
 accoding to resource usage and network congestion of accessible (nearest) edge servers
 """
+import json
+import random
+import requests
+import logging
+import sys
+from time import time
+
+logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler("debug.log"),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
 class OffloadingScheduler:
+
+    host_ips = {
+        "edge1": "138.246.237.7",
+        "edge2": "138.246.236.237",
+        "edge3": "138.246.237.5"
+    }
+
+    app_types = {
+        1 : "mobilenet",
+        2 : "squeezenet",
+        3 : "shufflenet",
+        4 : "binaryalert"
+    }
+
+    proxy_port = 8280
+    metric_port = 8180
 
     def __init__(self, vehicle, carla_world=None, base_station_roles=None) -> None:
         
@@ -15,25 +47,91 @@ class OffloadingScheduler:
 
         self.ego_pos = None
 
+    def offload_to_optimal(self, ego_pos):
+        
+        self.ego_pos = ego_pos
+        bs_coverage_thresh = 70
+        app = self.app_types[random.randint(1,4)]
+        #print(f"Vehicle location: {ego_pos.location}")
+
+        nearest_bs = self.find_nearest_base_station()
+        if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
+            # find ip address of the nearest base station
+            bs_hostname = self.base_station_roles[nearest_bs[0]]
+            bs_ip = self.host_ips[bs_hostname]
+
+            # find optimal base station to offload request according to min response time
+            edge_metrics = self.get_metrics(app, nearest_bs)
+            optimal_edge = sorted(edge_metrics.items(), key=lambda m: m[1])[0][0]
+
+            try:
+                req = json.dumps({"node": optimal_edge, "app": app, "request_start": time()})
+                res = requests.post(f"http://{bs_ip}:{self.proxy_port}/proxy", data=req)
+                print(f"Vehicle {self.vehicle.id} connects to {bs_hostname} -> Offload {app} to optimal {optimal_edge} from {edge_metrics}")
+            except Exception as exc:
+                print(f"Error while offloading {app} to {optimal_edge}")
+        else:
+            print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
+
     def offload_to_nearest(self, ego_pos):
         """
         Offload to the nearest base station that the vehicle is under the coverage area of.
         """
         self.ego_pos = ego_pos
-        bs_coverage_thresh = 50
-     
+        bs_coverage_thresh = 70
+        app = self.app_types[random.randint(1,4)]
         print(f"Vehicle location: {ego_pos.location}")
+
+        nearest_bs = self.find_nearest_base_station()
+        if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
+            # find ip address of the nearest base station
+            bs_hostname = self.base_station_roles[nearest_bs[0]]
+            bs_ip = self.host_ips[bs_hostname]
+
+            try:
+                req = json.dumps({"node": bs_hostname, "app": app, "request_start": time()})
+                res = requests.post(f"http://{bs_ip}:{self.proxy_port}/proxy", data=req)
+                print(f"Vehicle {self.vehicle.id} -> Offload {app} to bs {bs_hostname}")
+            except Exception as exc:
+                print(f"Error while offloading {app} to {bs_hostname}")
+        else:
+            print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud!")
+
+    def get_metrics(self, app: str, nearest_bs: tuple) -> dict:
+        """
+        Collect metrics from each node for the app type to be offloaded
+        """
+        bs_hostname = self.base_station_roles[nearest_bs[0]]
+        bs_ip = self.host_ips[bs_hostname]
+        req_list = [json.dumps({"node": edge, "app": app}) for edge in self.host_ips.keys()]
+        edge_metrics = {}
+        for req in req_list:
+            resp = requests.post(f"http://{bs_ip}:{self.metric_port}/metrics", data=req)
+            if resp.status_code != 200:
+                continue
+            metrics = json.loads(resp.text)
+            pod_num = metrics["pod_number"]
+            if pod_num == 0:
+                continue
+            pod_instances = metrics["pod_instances"]
+            res_total = 0.0
+            for _, pod_metric in pod_instances.items():
+                res_total += pod_metric["p50_res_time"]
+            edge_metrics[json.loads(req)["node"]] = res_total / pod_num
+        return edge_metrics
+
+    def find_nearest_base_station(self):
+        """
+        Find the nearest one.
+
+        Returns
+        -------
+        base_station_id : int
+            The id of nearest base station to potentially offload tasks.
+        """
         sorted_bs_list = self.sort_base_stations()
-
-        if sorted_bs_list:
-            nearest_bs = self.find_nearest_base_station(sorted_bs_list)
-            
-            if nearest_bs[1] < bs_coverage_thresh:
-                nearest_bs_role = self.base_station_roles[nearest_bs[0]]
-                print(f"Vehicle {self.vehicle.id} -> Offload to bs {nearest_bs_role}")
-            else:
-                print(f"Vehicle {self.vehicle.id} -> Local execution!")
-
+        nearest = sorted_bs_list[0] if sorted_bs_list else None
+        return nearest
 
     def sort_base_stations(self):
         """
@@ -53,18 +151,6 @@ class OffloadingScheduler:
         #print("Base stations: ",bs_sorted)
         return bs_sorted 
 
-    def find_nearest_base_station(self, sorted_bs_list: list):
-        """
-        Find the nearest one.
-
-        Returns
-        -------
-        base_station_id : int
-            The id of nearest base station to potentially offload tasks.
-        """
-        nearest = sorted_bs_list[0] if sorted_bs_list else None
-        return nearest
-
     def dist(self, a):
         """
         A fast method to retrieve the obstacle distance the ego
@@ -80,8 +166,5 @@ class OffloadingScheduler:
         distance : float
             The distance between ego and the target actor.
         """
-        return a.get_location().distance(self.ego_pos.location)
-
-        
-
+        return a.get_location().distance(self.ego_pos.location)    
 
