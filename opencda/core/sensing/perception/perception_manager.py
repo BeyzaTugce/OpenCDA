@@ -517,7 +517,7 @@ class PerceptionManager:
          objects: dict
             Updated object dictionary.
         """
-        self.offloading_scheduler.offload_to_nearest(self.ego_pos)
+        self.offloading_scheduler.offload_to_optimal(self.ego_pos)
 
         # retrieve current cameras and lidar data
         rgb_images = []
@@ -618,7 +618,7 @@ class PerceptionManager:
         vehicle_list = world.get_actors().filter("*vehicle*")
         thresh = 50 if not self.data_dump else 120
 
-        self.offloading_scheduler.offload_to_optimal(self.ego_pos)
+        self.offloading_scheduler.offload_to_nearest(self.ego_pos)
 
         vehicle_list = [v for v in vehicle_list if self.dist(v) < thresh and
                         v.id != self.id]

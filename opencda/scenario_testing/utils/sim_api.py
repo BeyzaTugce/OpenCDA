@@ -299,7 +299,7 @@ class ScenarioManager:
 
         return single_cav_list
 
-    def create_platoon_manager(self, map_helper=None, data_dump=False):
+    def create_platoon_manager(self, map_helper=None, data_dump=False, base_station_roles=None):
         """
         Create a list of platoons.
 
@@ -357,7 +357,8 @@ class ScenarioManager:
                     vehicle, cav, ['platooning'],
                     self.carla_map, self.cav_world,
                     current_time=self.scenario_params['current_time'],
-                    data_dumping=data_dump)
+                    data_dumping=data_dump,
+                    base_station_roles=base_station_roles)
 
                 # add the vehicle manager to platoon
                 if j == 0:

@@ -134,6 +134,14 @@ carla_traffic_manager:
     - spawn_position: [ 141.7194, 139.51, 0.3, 0, 0, 0 ]
       vehicle_speed_perc: -300
 
+# define the base stations
+base_station:
+  base_station_list:
+    - spawn_position: ["edge1", [90, 100, 0.3, 0, 0, 0]]
+    - spawn_position: ["edge2", [250, 100, 0.3, 0, 0, 0]]
+    - spawn_position: ["edge3", [400, 160, 0.3, 0, 0, 0]]    
+  base_station_range: []
+
 # define scenario. In this scenario, a 4-vehicle platoon already exists.
 scenario:
   platoon_list:

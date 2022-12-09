@@ -30,14 +30,17 @@ def run_scenario(opt, config_yaml):
             scenario_manager.client. \
                 start_recorder("platoon_joining_2lanefree_carla.log", True)
 
+        # create base stations in carla
+        bg_base_station_list, base_station_roles = scenario_manager.create_base_station_carla()
+
         # create platoon members
         platoon_list = \
             scenario_manager.create_platoon_manager(
-                data_dump=False)
+                data_dump=False, base_station_roles=base_station_roles)
 
         # create single cavs
         single_cav_list = \
-            scenario_manager.create_vehicle_manager(['platooning'])
+            scenario_manager.create_vehicle_manager(['platooning'], base_station_roles=base_station_roles)
 
         # create background traffic in carla
         traffic_manager, bg_veh_list = \
@@ -90,3 +93,5 @@ def run_scenario(opt, config_yaml):
             cav.destroy()
         for v in bg_veh_list:
             v.destroy()
+        for bs in bg_base_station_list:
+            bs.destroy()

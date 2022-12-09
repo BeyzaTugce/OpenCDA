@@ -122,9 +122,9 @@ carla_traffic_manager:
 # define the base stations
 base_station:
   base_station_list:
-    - spawn_position: ["edge1", [90, 100, 0.3, 0, 0, 0]]
-    - spawn_position: ["edge2", [250, 100, 0.3, 0, 0, 0]]
-    - spawn_position: ["edge3", [400, 160, 0.3, 0, 0, 0]]    
+    - spawn_position: ["edge1", [70, 100, 0.3, 0, 0, 0]]
+    - spawn_position: ["edge2", [200, 100, 0.3, 0, 0, 0]]
+    - spawn_position: ["edge3", [320, 160, 0.3, 0, 0, 0]]    
   base_station_range: []
       # xmin, xmax, x_step, y, num_of_stations
     #- [ 50, 650, 100, 90, 4]
@@ -145,15 +145,27 @@ scenario:
           <<: *base_local_planner
           debug_trajectory: false
           debug: false
-    #- <<: *vehicle_base
-    #  spawn_position: [40.7194, 139.51, 0.3, 0, 0, 0]
-    #  destination: [420, 139.51, 0.3]
-    #  v2x:
-    #    <<: *base_v2x
-    #    communication_range: 45
-    #  behavior:
-    #    <<: *base_behavior
-    #    local_planner:
-    #      <<: *base_local_planner
-    #      debug_trajectory: false
-    #      debug: false
+    - <<: *vehicle_base
+      spawn_position: [180.7194, 139.51, 0.3, 0, 0, 0]
+      destination: [440, 133.51, 0.3]
+      v2x:
+        <<: *base_v2x
+        communication_range: 45
+      behavior:
+        <<: *base_behavior
+        local_planner:
+          <<: *base_local_planner
+          debug_trajectory: false
+          debug: false
+    - <<: *vehicle_base
+      spawn_position: [300.7194, 145.51, 0.3, 0, 0, 0]
+      destination: [450, 139.51, 0.3]
+      v2x:
+        <<: *base_v2x
+        communication_range: 45
+      behavior:
+        <<: *base_behavior
+        local_planner:
+          <<: *base_local_planner
+          debug_trajectory: false
+          debug: false

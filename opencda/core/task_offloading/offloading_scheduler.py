@@ -10,6 +10,7 @@ import requests
 import logging
 import sys
 from time import time
+from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(
         level=logging.INFO,
@@ -29,14 +30,16 @@ class OffloadingScheduler:
     }
 
     app_types = {
-        1 : "mobilenet",
-        2 : "squeezenet",
-        3 : "shufflenet",
-        4 : "binaryalert"
+        "mobilenet": "https://serverless-mobilenet-6ag2jbmdqa-uc.a.run.app",
+        "squeezenet": "https://serverless-squeezenet-6ag2jbmdqa-uc.a.run.app",
+        "shufflenet": "https://serverless-shufflenet-6ag2jbmdqa-uc.a.run.app",
+        "binaryalert": "https://serverless-binaryalert-6ag2jbmdqa-uc.a.run.app"
     }
 
+    time_limit = 15
     proxy_port = 8280
     metric_port = 8180
+    counter = 1
 
     def __init__(self, vehicle, carla_world=None, base_station_roles=None) -> None:
         
@@ -47,55 +50,79 @@ class OffloadingScheduler:
 
         self.ego_pos = None
 
+    def post_url(self, args):
+        return requests.post(args[0], data=args[1])
+
     def offload_to_optimal(self, ego_pos):
-        
+        """
+        Offload to the optimal base station having minimum reponse time.
+        """
         self.ego_pos = ego_pos
-        bs_coverage_thresh = 70
-        app = self.app_types[random.randint(1,4)]
+        bs_coverage_thresh = 120
+        list_of_urls = []
+        #app = self.app_types[random.randint(1,4)]
         #print(f"Vehicle location: {ego_pos.location}")
+        for app in self.app_types.keys():
+            nearest_bs = self.find_nearest_base_station()
+            if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
+                # find ip address of the nearest base station
+                bs_hostname = self.base_station_roles[nearest_bs[0]]
+                bs_ip = self.host_ips[bs_hostname]
 
-        nearest_bs = self.find_nearest_base_station()
-        if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
-            # find ip address of the nearest base station
-            bs_hostname = self.base_station_roles[nearest_bs[0]]
-            bs_ip = self.host_ips[bs_hostname]
+                # find optimal base station to offload request according to min response time
+                edge_metrics = self.get_metrics(app, nearest_bs)
+                optimal_edge = sorted(edge_metrics.items(), key=lambda m: m[1])[0][0]
+    
+                if edge_metrics[optimal_edge] > self.time_limit:
+                    req = json.dumps({"request_start": time()})
+                    requests.post(f"{self.app_types[app]}/init", req)
+                    requests.post(f"{self.app_types[app]}/run")
+                    #list_of_urls.append((f"{self.app_types[app]}/init", req))
+                    print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
+                else:
+                    req = json.dumps({"node": optimal_edge, "app": app, "request_start": time()})
+                    list_of_urls.append((f"http://{bs_ip}:{self.proxy_port}/proxy", req))
+                    print(f"Vehicle {self.vehicle.id} connects to {bs_hostname} -> Offload {app} to optimal {optimal_edge} from {edge_metrics}")
+            else:
+                print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
 
-            # find optimal base station to offload request according to min response time
-            edge_metrics = self.get_metrics(app, nearest_bs)
-            optimal_edge = sorted(edge_metrics.items(), key=lambda m: m[1])[0][0]
-
-            try:
-                req = json.dumps({"node": optimal_edge, "app": app, "request_start": time()})
-                res = requests.post(f"http://{bs_ip}:{self.proxy_port}/proxy", data=req)
-                print(f"Vehicle {self.vehicle.id} connects to {bs_hostname} -> Offload {app} to optimal {optimal_edge} from {edge_metrics}")
-            except Exception as exc:
-                print(f"Error while offloading {app} to {optimal_edge}")
-        else:
-            print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
+        for _ in range(self.counter):
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                response_list = list(pool.map(self.post_url, list_of_urls))
+        self.counter += 1
 
     def offload_to_nearest(self, ego_pos):
         """
         Offload to the nearest base station that the vehicle is under the coverage area of.
         """
         self.ego_pos = ego_pos
-        bs_coverage_thresh = 70
-        app = self.app_types[random.randint(1,4)]
-        print(f"Vehicle location: {ego_pos.location}")
+        bs_coverage_thresh = 120
+        list_of_urls = []
+        #app = self.app_types[random.randint(1,4)]
 
-        nearest_bs = self.find_nearest_base_station()
-        if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
-            # find ip address of the nearest base station
-            bs_hostname = self.base_station_roles[nearest_bs[0]]
-            bs_ip = self.host_ips[bs_hostname]
+        for app in self.app_types:
+            nearest_bs = self.find_nearest_base_station()
+            if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
+                # find ip address of the nearest base station
+                bs_hostname = self.base_station_roles[nearest_bs[0]]
+                bs_ip = self.host_ips[bs_hostname]
+                edge_metrics = self.get_metrics(app, nearest_bs)
 
-            try:
+                #if edge_metrics[bs_hostname] > self.time_limit:
+                #    req = json.dumps({"request_start": time()})
+                #    list_of_urls.append((self.app_types[app], req))
+                #    print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
+                #else:
                 req = json.dumps({"node": bs_hostname, "app": app, "request_start": time()})
-                res = requests.post(f"http://{bs_ip}:{self.proxy_port}/proxy", data=req)
-                print(f"Vehicle {self.vehicle.id} -> Offload {app} to bs {bs_hostname}")
-            except Exception as exc:
-                print(f"Error while offloading {app} to {bs_hostname}")
-        else:
-            print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud!")
+                list_of_urls.append((f"http://{bs_ip}:{self.proxy_port}/proxy", req))
+                print(f"Vehicle {self.vehicle.id} connects to {bs_hostname} -> Offload {app} to nearest {bs_hostname}")
+            else:
+                print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud!")
+
+        for _ in range(self.counter):
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                response_list = list(pool.map(self.post_url, list_of_urls))
+        self.counter += 1
 
     def get_metrics(self, app: str, nearest_bs: tuple) -> dict:
         """
