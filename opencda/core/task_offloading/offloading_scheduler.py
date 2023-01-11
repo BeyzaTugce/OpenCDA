@@ -36,33 +36,84 @@ class OffloadingScheduler:
         "binaryalert": "https://serverless-binaryalert-6ag2jbmdqa-uc.a.run.app"
     }
 
-    time_limit = 15
-    proxy_port = 8280
-    metric_port = 8180
+    time_limit = 8
     counter = 1
 
-    def __init__(self, vehicle, carla_world=None, base_station_roles=None) -> None:
+    def __init__(self, vehicle, config_yaml, carla_world=None, base_station_roles=None) -> None:
         
         self.vehicle = vehicle
         self.base_station_roles = base_station_roles
         self.carla_world = carla_world if carla_world is not None \
             else self.vehicle.get_world()
 
+        self.activate = config_yaml['activate']
+        self.metric_port = config_yaml['metrics_port']
+        self.proxy_port = config_yaml['proxy_port']
         self.ego_pos = None
 
+    def offload(self, ego_pos):
+        """
+        Offload applications to the edge servers or remote cloud server.
+
+        Parameters
+        ----------
+        ego_pos : carla.Transform
+            Ego vehicle pose.
+
+        Returns
+        -------
+        responses : list
+            A list of response objects that return outputs for corresponding applications.
+        """
+        self.ego_pos = ego_pos
+
+        response_objects = None
+
+        if not self.activate:
+            response_objects = self.offload_to_nearest(ego_pos)
+        else:
+            response_objects = self.offload_to_optimal(ego_pos)
+
+        return response_objects
+
     def post_url(self, args):
+        """
+        Post requests to the edge server according to the given arguments
+
+        Parameters
+        ----------
+        args : list
+            A list of arguments including the URL of service on the edge server and the request data.
+
+        Returns
+        -------
+        responses : Response
+            Response object that returns from the containerized application
+        """
         return requests.post(args[0], data=args[1])
 
     def offload_to_optimal(self, ego_pos):
         """
         Offload to the optimal base station having minimum reponse time.
+
+        Parameters
+        ----------
+        ego_pos : carla.Transform
+            Ego vehicle pose.
+
+        Returns
+        -------
+        responses : list
+            A list of response objects that return outputs for corresponding applications.
         """
         self.ego_pos = ego_pos
         bs_coverage_thresh = 120
         list_of_urls = []
         #app = self.app_types[random.randint(1,4)]
         #print(f"Vehicle location: {ego_pos.location}")
-        for app in self.app_types.keys():
+        for _ in range(self.counter):
+        #for app in self.app_types.keys():
+            app = "binaryalert"
             nearest_bs = self.find_nearest_base_station()
             if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
                 # find ip address of the nearest base station
@@ -75,9 +126,8 @@ class OffloadingScheduler:
     
                 if edge_metrics[optimal_edge] > self.time_limit:
                     req = json.dumps({"request_start": time()})
-                    requests.post(f"{self.app_types[app]}/init", req)
-                    requests.post(f"{self.app_types[app]}/run")
-                    #list_of_urls.append((f"{self.app_types[app]}/init", req))
+                    list_of_urls.append((f"{self.app_types[app]}/init", req))
+                    list_of_urls.append((f"{self.app_types[app]}/run", req))
                     print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
                 else:
                     req = json.dumps({"node": optimal_edge, "app": app, "request_start": time()})
@@ -86,43 +136,50 @@ class OffloadingScheduler:
             else:
                 print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
 
-        for _ in range(self.counter):
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                response_list = list(pool.map(self.post_url, list_of_urls))
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            response_list = list(pool.map(self.post_url, list_of_urls))
         self.counter += 1
+
+        return response_list
 
     def offload_to_nearest(self, ego_pos):
         """
         Offload to the nearest base station that the vehicle is under the coverage area of.
+        
+        Parameters
+        ----------
+        ego_pos : carla.Transform
+            Ego vehicle pose.
+
+        Returns
+        -------
+        responses : list
+            A list of response objects that return outputs for corresponding applications.
         """
         self.ego_pos = ego_pos
         bs_coverage_thresh = 120
         list_of_urls = []
         #app = self.app_types[random.randint(1,4)]
-
-        for app in self.app_types:
+        for _ in range(self.counter):
+        #for app in self.app_types:
+            app = "mobilenet"
             nearest_bs = self.find_nearest_base_station()
             if nearest_bs and nearest_bs[1] < bs_coverage_thresh:
                 # find ip address of the nearest base station
                 bs_hostname = self.base_station_roles[nearest_bs[0]]
                 bs_ip = self.host_ips[bs_hostname]
-                edge_metrics = self.get_metrics(app, nearest_bs)
 
-                #if edge_metrics[bs_hostname] > self.time_limit:
-                #    req = json.dumps({"request_start": time()})
-                #    list_of_urls.append((self.app_types[app], req))
-                #    print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud")
-                #else:
                 req = json.dumps({"node": bs_hostname, "app": app, "request_start": time()})
                 list_of_urls.append((f"http://{bs_ip}:{self.proxy_port}/proxy", req))
                 print(f"Vehicle {self.vehicle.id} connects to {bs_hostname} -> Offload {app} to nearest {bs_hostname}")
             else:
                 print(f"Vehicle {self.vehicle.id} -> Offload {app} to the remote cloud!")
 
-        for _ in range(self.counter):
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                response_list = list(pool.map(self.post_url, list_of_urls))
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            response_list = list(pool.map(self.post_url, list_of_urls))
         self.counter += 1
+
+        return response_list
 
     def get_metrics(self, app: str, nearest_bs: tuple) -> dict:
         """

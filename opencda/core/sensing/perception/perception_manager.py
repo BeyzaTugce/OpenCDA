@@ -443,7 +443,12 @@ class PerceptionManager:
                                                       self.global_position)
 
         # offloading scheduler
-        self.offloading_scheduler = OffloadingScheduler(vehicle, carla_world=carla_world, base_station_roles=base_station_roles)
+        self.offloading_scheduler = OffloadingScheduler(
+            vehicle,
+            config_yaml=config_yaml['offloading'],
+            carla_world=carla_world,
+            base_station_roles=base_station_roles
+    )
 
         # count how many steps have been passed
         self.count = 0
@@ -490,6 +495,7 @@ class PerceptionManager:
         objects = {'vehicles': [],
                    'traffic_lights': []}
 
+        #self.offloading_scheduler.offload(self.ego_pos)
         if not self.activate:
             objects = self.deactivate_mode(objects)
 
@@ -517,7 +523,6 @@ class PerceptionManager:
          objects: dict
             Updated object dictionary.
         """
-        self.offloading_scheduler.offload_to_optimal(self.ego_pos)
 
         # retrieve current cameras and lidar data
         rgb_images = []
@@ -617,8 +622,6 @@ class PerceptionManager:
 
         vehicle_list = world.get_actors().filter("*vehicle*")
         thresh = 50 if not self.data_dump else 120
-
-        self.offloading_scheduler.offload_to_nearest(self.ego_pos)
 
         vehicle_list = [v for v in vehicle_list if self.dist(v) < thresh and
                         v.id != self.id]

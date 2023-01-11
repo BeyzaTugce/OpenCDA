@@ -96,18 +96,19 @@ class VehicleManager(object):
         control_config = config_yaml['controller']
         v2x_config = config_yaml['v2x']
 
-        # offloading scheduler
-        self.offloading_scheduler = OffloadingScheduler(vehicle, cav_world, base_station_roles)
-
         # v2x module
         self.v2x_manager = V2XManager(cav_world, v2x_config, self.vid)
         # localization module
         self.localizer = LocalizationManager(
             vehicle, sensing_config['localization'], carla_map)
         # perception module
+        perception = sensing_config['perception']
         self.perception_manager = PerceptionManager(
-            vehicle, sensing_config['perception'], cav_world,
+            vehicle, perception, cav_world,
             data_dumping, base_station_roles=base_station_roles)
+        # offloading scheduler
+        self.offloading_scheduler = OffloadingScheduler(
+            vehicle, perception['offloading'], cav_world, base_station_roles)
         # map manager
         self.map_manager = MapManager(vehicle,
                                       carla_map,
